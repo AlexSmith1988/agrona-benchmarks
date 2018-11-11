@@ -40,13 +40,14 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 @State(Scope.Group)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
 @BenchmarkMode(Mode.AverageTime)
-@Warmup(iterations = 3, time = 3)
-@Measurement(iterations = 3, time = 3)
+@Warmup(iterations = 1, time = 1)
+@Measurement(iterations = 1, time = 1)
 public class TightLoopsAndQueuesBenchmark {
 
     private final int capacity = 1_000_000;
@@ -56,10 +57,13 @@ public class TightLoopsAndQueuesBenchmark {
 
     private int value = 1;
 
-    private final RateLimiter rateLimiter = RateLimiter.create(1_000_000);
+    private final RateLimiter rateLimiter = RateLimiter.create(660_000);
 
     private int testRate = 12500;
     private final RateLimiter testRateLimiter = RateLimiter.create(testRate);
+
+    private static final int stats[] = new int[100_000];
+    private static int pos = -1;
 
     //    @Benchmark
     public void testRateLimiter() {
@@ -85,10 +89,30 @@ public class TightLoopsAndQueuesBenchmark {
     @GroupThreads(1)
     public Integer testPlainPoll() {
         Integer poll = null;
+        int n = 0;
         while (poll == null) {
+            ++n;
             poll = agronaArrayQueue.poll();
         }
+        rateLimiter.acquire();
+        stats[++pos] = n;
         return poll;
+    }
+
+    @TearDown
+    public void printOut() {
+        final int[] resultingStats = Arrays.copyOf(stats, pos + 1);
+        Arrays.sort(resultingStats);
+        System.out.println("Stats: ");
+        System.out.println(
+                "0%: " + resultingStats[0] +
+                        "; 90%: " + resultingStats[(int) (pos * 0.9)] +
+                        "; 95%: " + resultingStats[(int) (pos * 0.95)] +
+                        "; 99%: " + resultingStats[(int) (pos * 0.99)] +
+                        "; 99.9%: " + resultingStats[(int) (pos * 0.999)] +
+                        "; 99.99%: " + resultingStats[(int) (pos * 0.9999)] +
+                        "; 99.999%: " + resultingStats[(int) (pos * 0.99999)] +
+                        "; max: " + resultingStats[pos]);
     }
 
     public static void main(String[] args) throws RunnerException {
