@@ -41,9 +41,6 @@ import org.openjdk.jmh.runner.RunnerException;
 import org.openjdk.jmh.runner.options.Options;
 import org.openjdk.jmh.runner.options.OptionsBuilder;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -52,12 +49,12 @@ import java.util.concurrent.TimeUnit;
 
 @State(Scope.Group)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
-@BenchmarkMode(Mode.AverageTime)
+@BenchmarkMode({Mode.AverageTime, Mode.SampleTime})
 @Warmup(iterations = 2, time = 2)
 @Measurement(iterations = 1, time = 1)
 public class QueuesInTightLoopBenchmark {
 
-    private final int capacity = 100_000;
+    private final int capacity = 10_000_000;
 
     // Queues under test
     private final Queue<Integer> manyToOneConcurrentArrayQueue = new ManyToOneConcurrentArrayQueue<>(capacity);
@@ -78,12 +75,9 @@ public class QueuesInTightLoopBenchmark {
     private int testRate = 12500;
     private final RateLimiter systemLoadSimulator = RateLimiter.create(testRate);
 
-    private final int busyCyclesTillFruitfulPoll[] = new int[100_000];
-    private int pos = -1;
-
     //    @Benchmark
-//    @Group("simple")
-//    @GroupThreads(2)
+    @BenchmarkMode(Mode.SampleTime)
+    @Group("simple")
     public void testRateLimiter() {
         messageProcessingImitation.acquire();
     }
@@ -95,7 +89,6 @@ public class QueuesInTightLoopBenchmark {
         arrayBlockingQueue.clear();
         concurrentLinkedQueue.clear();
         linkedBlockingQueue.clear();
-        pos = -1;
     }
 
     @Benchmark
@@ -126,7 +119,6 @@ public class QueuesInTightLoopBenchmark {
             poll = queue.poll();
         }
         messageProcessingImitation.acquire();
-        busyCyclesTillFruitfulPoll[++pos] = n;
         return poll;
     }
 
@@ -185,26 +177,6 @@ public class QueuesInTightLoopBenchmark {
     public Integer linkedBlockingQueuePoll() {
         return testPlainPoll(linkedBlockingQueue);
     }
-
-    @TearDown
-    public void printOut() {
-        if (pos >= 0) {
-            final int[] resultingStats = Arrays.copyOf(busyCyclesTillFruitfulPoll, pos + 1);
-            Arrays.sort(resultingStats);
-            results.add(" 0%: " + resultingStats[0] +
-                    "; 90%: " + resultingStats[(int) (pos * 0.9)] +
-                    "; 95%: " + resultingStats[(int) (pos * 0.95)] +
-                    "; 99%: " + resultingStats[(int) (pos * 0.99)] +
-                    "; 99.9%: " + resultingStats[(int) (pos * 0.999)] +
-                    "; 99.99%: " + resultingStats[(int) (pos * 0.9999)] +
-                    "; 99.999%: " + resultingStats[(int) (pos * 0.99999)] +
-                    "; max: " + resultingStats[pos]);
-
-            System.out.println(results);
-        }
-    }
-
-    static List<String> results = new ArrayList<>();
 
     public static void main(String[] args) throws RunnerException {
         Options opt =
